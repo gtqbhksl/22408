@@ -3,6 +3,7 @@
   let currentYear = '2025';
   let currentType = 'all';
   let currentPage = 1;
+  let currentItems = [];
   const PAGE_SIZE = 20;
 
   function initExamBank() {
@@ -55,6 +56,7 @@
     const start = (currentPage - 1) * PAGE_SIZE;
     const end = start + PAGE_SIZE;
     const pageItems = filtered.slice(start, end);
+    currentItems = pageItems;
 
     // Stats
     const stats = document.getElementById('examStats');
@@ -83,7 +85,10 @@
             <span class="q-type ${type}">${type}</span>
             <span class="q-number">第${num}题</span>
           </div>
-          <button class="q-toggle" onclick="toggleExamAnswer(this)">查看解答</button>
+          <div class="q-actions">
+            <button class="q-copy" title="复制题干与选项（保留 LaTeX 源码）" onclick="copyExamQuestion(this, ${i})">复制题目</button>
+            <button class="q-toggle" onclick="toggleExamAnswer(this)">查看解答</button>
+          </div>
         </div>
         <div class="q-text">${question}</div>
         <div class="q-hidden">
@@ -125,8 +130,54 @@
     document.getElementById('sec-exambank').scrollIntoView({ behavior: 'smooth' });
   }
 
+  function copyText(text) {
+    // execCommand 回退：用于 clipboard API 不可用（非安全上下文）或被拒绝（如文档未聚焦）
+    const fallback = function() {
+      return new Promise(function(resolve, reject) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;top:-1000px;left:0;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy') ? resolve() : reject(new Error('copy failed'));
+        } catch (e) {
+          reject(e);
+        }
+        ta.remove();
+      });
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(fallback);
+    }
+    return fallback();
+  }
+
+  function copyExamQuestion(btn, i) {
+    const item = currentItems[i];
+    if (!item) return;
+    const text = String(item[3] || '').replace(/\r/g, '').trim();
+    const label = btn.textContent;
+    const restore = function() {
+      btn.textContent = label;
+      btn.disabled = false;
+    };
+    copyText(text).then(function() {
+      btn.textContent = '已复制 ✓';
+      btn.disabled = true;
+      setTimeout(restore, 1500);
+    }).catch(function() {
+      btn.textContent = '复制失败';
+      btn.disabled = true;
+      setTimeout(restore, 1500);
+    });
+  }
+
   function toggleExamAnswer(btn) {
-    const hidden = btn.parentElement.nextElementSibling.nextElementSibling;
+    const card = btn.closest('.q-card');
+    const text = card && card.querySelector('.q-text');
+    const hidden = text && text.nextElementSibling;
+    if (!hidden) return;
     if (hidden.classList.contains('q-hidden')) {
       hidden.classList.remove('q-hidden');
       btn.textContent = '收起解答';
@@ -143,6 +194,7 @@
   window.filterExamType = filterExamType;
   window.toggleExamAnswer = toggleExamAnswer;
   window.examPage = examPage;
+  window.copyExamQuestion = copyExamQuestion;
   window.initExamBank = initExamBank;
 
   if (document.readyState === 'loading') {
